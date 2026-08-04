@@ -25,3 +25,16 @@ export interface JwtPayload {
   email: string;
   role: string;
 }
+export interface RestaurantType {
+  id: string;
+  ownerId: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  address: string;
+  cuisineType: string;
+  isOpen: boolean;
+  rating: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
