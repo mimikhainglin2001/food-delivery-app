@@ -59,11 +59,27 @@ export class RestaurantsService {
     return restaurant;
   }
 
-  async findAll() {
+  async findAll(search?: string) {
     // if search is provided, filter by name OR cuisine type (case-insensitive)
     // only return open restaurants to customers
-
-    return this.db.select().from(schema.restaurants);
+    if (search) {
+      return this.db
+        .select()
+        .from(schema.restaurants)
+        .where(
+          and(
+            eq(schema.restaurants.isOpen, true),
+            or(
+              ilike(schema.restaurants.name, `%${search}%`),
+              ilike(schema.restaurants.cuisineType, `%${search}%`),
+            ),
+          ),
+        );
+    }
+    return this.db
+      .select()
+      .from(schema.restaurants)
+      .where(eq(schema.restaurants.isOpen, true));
   }
 
   async update(id: string, ownerId: string, dto: UpdateRestaurantDto) {

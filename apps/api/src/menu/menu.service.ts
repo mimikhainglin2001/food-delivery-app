@@ -109,7 +109,7 @@ export class MenuService {
       .insert(schema.menuItems)
       .values({
         restaurantId: restaurant.id,
-        category_id: dto.categoryId,
+        categoryId: dto.categoryId,
         name: dto.name,
         description: dto.description,
         price: dto.price,

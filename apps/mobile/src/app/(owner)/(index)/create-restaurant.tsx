@@ -2,7 +2,6 @@ import { openSettings } from "expo-linking";
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,6 +11,7 @@ import {
 } from "react-native";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
+import { showAlert } from "@/components/custom-alert";
 import { api } from "@/lib/axios";
 import { useImageUploader } from "@/lib/uploadthing";
 
@@ -26,10 +26,10 @@ export default function CreateRestaurantScreen() {
   const { openImagePicker, isUploading } = useImageUploader("restaurantImage", {
     onClientUploadComplete: (res) => {
       setImageUrl(res[0].ufsUrl);
-      Alert.alert("Image uploaded successfully");
+      showAlert("Image uploaded", "Your image was uploaded successfully.");
     },
     onUploadError: (error) => {
-      Alert.alert("Upload failed", error.message);
+      showAlert("Upload failed", error.message);
     },
   });
 
@@ -47,7 +47,7 @@ export default function CreateRestaurantScreen() {
       router.replace("/(owner)/(index)");
     },
     onError: (e: any) => {
-      Alert.alert(
+      showAlert(
         "Error",
         e?.response?.data?.message ?? "Something went wrong",
       );
@@ -56,7 +56,10 @@ export default function CreateRestaurantScreen() {
 
   function handleSubmit() {
     if (!name || !address || !cuisineType) {
-      return Alert.alert("Please fill in all required fields");
+      return showAlert(
+        "Incomplete form",
+        "Please fill in all required fields.",
+      );
     }
     createRestaurant();
   }
@@ -71,12 +74,12 @@ export default function CreateRestaurantScreen() {
           void openImagePicker({
             source: "library",
             onInsufficientPermissions: () => {
-              Alert.alert(
+              showAlert(
                 "No permissions",
                 "You need to grant permission to your phone",
                 [
                   { text: "Dismiss" },
-                  { text: "Open Settings", onPress: void openSettings },
+                  { text: "Open Settings", onPress: () => void openSettings() },
                 ],
               );
             },

@@ -41,9 +41,9 @@ export class RestaurantsController {
   }
 
   @Get()
-  findAll() {
+  findAll(@Query('search') search?: string) {
     // @Query('search') extracts ?search= from the URL — optional
-    return this.restaurantsService.findAll();
+    return this.restaurantsService.findAll(search);
   }
 
   @Get(':id')
