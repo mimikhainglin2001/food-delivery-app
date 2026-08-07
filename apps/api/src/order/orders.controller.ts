@@ -15,6 +15,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtPayload, UserRole } from '@food-delivery/types';
+import { UpdateStatusDto } from './dto/update-status.dto';
 
 type AuthRequest = ExpressRequest & { user: JwtPayload };
 
@@ -34,7 +35,25 @@ export class OrdersController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.CUSTOMER, UserRole.DRIVER)
   findMine(@Request() req: AuthRequest) {
-    return this.ordersService.findMyOrders(req.user.sub, req.user.role);
+    return this.ordersService.findByCustomer(req.user.sub, req.user.sub);
+  }
+
+  @Get('restaurant')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.RESTAURANT_OWNER)
+  findByRestaurant(@Request() req: AuthRequest) {
+    return this.ordersService.findByRestaurant(req.user.sub);
+  }
+
+  @Patch(':id/status')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.RESTAURANT_OWNER, UserRole.DRIVER)
+  updateStatus(
+    @Param('id') id: string,
+    @Request() req: AuthRequest,
+    @Body() dto: UpdateStatusDto,
+  ) {
+    return this.ordersService.updateStatus(id, dto.status, req.user);
   }
 
   @Get(':id')

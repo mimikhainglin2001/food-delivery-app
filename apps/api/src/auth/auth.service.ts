@@ -20,6 +20,7 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
+  //register
   async register(dto: RegisterDto) {
     const [existing] = await this.db
       .select()
@@ -46,6 +47,7 @@ export class AuthService {
     };
   }
 
+  //login
   async login(dto: LoginDto) {
     const [user] = await this.db
       .select()
@@ -62,7 +64,7 @@ export class AuthService {
   }
 
   private sanitizeUser(user: schema.User) {
-    const { password, ...sanitizedUser } = user;
+    const { password, ...sanitizedUser } = user; // remove the password
     return sanitizedUser;
   }
 

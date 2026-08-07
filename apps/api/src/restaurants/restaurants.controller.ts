@@ -19,7 +19,22 @@ import { JwtPayload } from '@food-delivery/types';
 import { UserRole } from '@food-delivery/types';
 import { Request as ExpressRequest } from 'express';
 
-type AuthRequest = ExpressRequest & { user: JwtPayload };
+
+// Normally Express has
+
+// request.body
+
+// request.params
+
+// request.query
+// But your guard added
+
+// request.user
+
+// TypeScript doesn't know that.
+
+// So you create a custom type:
+type AuthRequest = ExpressRequest & { user: JwtPayload }; 
 
 @Controller('restaurants')
 @UseGuards(JwtAuthGuard)

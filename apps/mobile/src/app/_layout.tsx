@@ -4,6 +4,7 @@ import { CustomAlertProvider } from "@/components/custom-alert";
 import { AuthProvider, useAuth } from "@/context/auth-context";
 import { Stack } from "expo-router";
 import { UserRole } from "@food-delivery/types";
+import { StripeProvider } from "@stripe/stripe-react-native";
 
 const queryClient = new QueryClient();
 
@@ -24,7 +25,7 @@ function RootNavigator() {
       <Stack.Protected guard={!!user && user.role === UserRole.CUSTOMER}>
         <Stack.Screen name="(customer)" />
       </Stack.Protected>
-      
+
       <Stack.Protected
         guard={!!user && user.role === UserRole.RESTAURANT_OWNER}
       >
@@ -37,14 +38,17 @@ function RootNavigator() {
   );
 }
 
-export default function RootLayout() {
+export default function TabLayout() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <AnimatedSplashOverlay />
-        <RootNavigator />
-        <CustomAlertProvider />
-      </AuthProvider>
+      <StripeProvider
+        publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY!}
+      >
+        <AuthProvider>
+          <AnimatedSplashOverlay />
+          <RootNavigator />
+        </AuthProvider>
+      </StripeProvider>
     </QueryClientProvider>
   );
 }

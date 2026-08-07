@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { desc, eq, inArray, SQL } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { NeonHttpDatabase } from 'drizzle-orm/neon-http';
 import * as schema from '../db/schema';
 import { OrderStatus, UserRole } from '@food-delivery/types';
@@ -77,20 +77,11 @@ export class OrdersService {
     return order;
   }
 
-  async findByCustomer(customerId: string) {
-    return this.findOrdersWithDetails(eq(schema.orders.customerId, customerId));
-  }
-
-  async findByDriver(driverId: string) {
-    return this.findOrdersWithDetails(eq(schema.orders.driverId, driverId));
-  }
-
-  // routes to customer or driver query based on JWT role
-  async findMyOrders(userId: string, role: string) {
-    if (role === UserRole.DRIVER) {
-      return this.findByDriver(userId);
-    }
-    return this.findByCustomer(userId);
+  async findByCustomer(customerId: string, sub: string) {
+    return this.db
+      .select()
+      .from(schema.orders)
+      .where(eq(schema.orders.customerId, customerId));
   }
 
   async findById(id: string, user: { sub: string; role: string }) {
@@ -119,6 +110,89 @@ export class OrdersService {
     return { ...order, items };
   }
 
+  async findByRestaurant(ownerId: string) {
+    const [restaurant] = await this.db
+      .select()
+      .from(schema.restaurants)
+      .where(eq(schema.restaurants.ownerId, ownerId));
+
+    if (!restaurant) throw new NotFoundException('Restaurant not found');
+
+    return this.db
+      .select()
+      .from(schema.orders)
+      .where(eq(schema.orders.restaurantId, restaurant.id));
+  }
+
+  async updateStatus(
+    orderId: string,
+    newStatus: OrderStatus,
+    user: { sub: string; role: string },
+  ) {
+    const [order] = await this.db
+      .select()
+      .from(schema.orders)
+      .where(eq(schema.orders.id, orderId));
+
+    if (!order) throw new NotFoundException('Order not found');
+
+    this.validateTransition(order.status ?? 'PENDING', newStatus, user.role);
+
+    if (user.role === UserRole.RESTAURANT_OWNER) {
+      const [restaurant] = await this.db
+        .select()
+        .from(schema.restaurants)
+        .where(eq(schema.restaurants.ownerId, user.sub));
+
+      if (!restaurant || restaurant.id !== order.restaurantId) {
+        throw new ForbiddenException(
+          'This order does not belong to your restaurant',
+        );
+      }
+    }
+
+    if (user.role === UserRole.DRIVER && order.driverId !== user.sub) {
+      throw new ForbiddenException('This order is not assigned to you');
+    }
+
+    const [updated] = await this.db
+      .update(schema.orders)
+      .set({ status: newStatus, updatedAt: new Date() })
+      .where(eq(schema.orders.id, orderId))
+      .returning();
+
+    return updated;
+  }
+
+  private validateTransition(
+    currentStatus: string,
+    newStatus: string,
+    role: string,
+  ) {
+    const ownerTransitions: Record<string, string[]> = {
+      CONFIRMED: ['PREPARING', 'CANCELLED'],
+      PREPARING: ['READY', 'CANCELLED'],
+    };
+
+    const driverTransitions: Record<string, string[]> = {
+      READY: ['PICKED_UP'],
+      PICKED_UP: ['DELIVERED'],
+    };
+
+    const allowed =
+      role === UserRole.RESTAURANT_OWNER
+        ? (ownerTransitions[currentStatus] ?? [])
+        : role === UserRole.DRIVER
+          ? (driverTransitions[currentStatus] ?? [])
+          : [];
+
+    if (!allowed.includes(newStatus)) {
+      throw new BadRequestException(
+        `Cannot transition from ${currentStatus} to ${newStatus}`,
+      );
+    }
+  }
+
   private async isOwnerOfRestaurant(ownerId: string, restaurantId: string) {
     // one restaurant per owner — single query is enough
     const [restaurant] = await this.db
@@ -127,44 +201,5 @@ export class OrdersService {
       .where(eq(schema.restaurants.ownerId, ownerId));
 
     return restaurant?.id === restaurantId;
-  }
-
-  private async enrichOrders(orderRows: (typeof schema.orders.$inferSelect)[]) {
-    if (orderRows.length === 0) return [];
-
-    const orderIds = orderRows.map((o) => o.id);
-    const restaurantIds = [...new Set(orderRows.map((o) => o.restaurantId))];
-
-    const restaurants = await this.db
-      .select({
-        id: schema.restaurants.id,
-        name: schema.restaurants.name,
-      })
-      .from(schema.restaurants)
-      .where(inArray(schema.restaurants.id, restaurantIds));
-
-    const items = await this.db
-      .select()
-      .from(schema.orderItems)
-      .where(inArray(schema.orderItems.orderId, orderIds));
-
-    const restaurantMap = Object.fromEntries(restaurants.map((r) => [r.id, r]));
-
-    return orderRows.map((order) => ({
-      ...order,
-      restaurant: restaurantMap[order.restaurantId],
-      items: items.filter((i) => i.orderId === order.id),
-    }));
-  }
-
-  // shared fetch: filter orders, sort newest first, enrich with relations
-  private async findOrdersWithDetails(where: SQL) {
-    const orderRows = await this.db
-      .select()
-      .from(schema.orders)
-      .where(where)
-      .orderBy(desc(schema.orders.createdAt));
-
-    return this.enrichOrders(orderRows);
   }
 }

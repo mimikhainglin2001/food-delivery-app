@@ -69,7 +69,7 @@ export default function CartScreen() {
           <Text style={styles.emptyText}>Your cart is empty</Text>
           <Pressable
             style={styles.browseButton}
-            onPress={() => router.push("/(customer)/(home)")}
+            onPress={() => router.push("/(customer)/(tabs)/(home)")}
           >
             <Text style={styles.browseButtonText}>Browse Restaurants</Text>
           </Pressable>
