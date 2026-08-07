@@ -8,6 +8,7 @@ import { RestaurantsModule } from './restaurants/restaurants.module';
 import { MenuModule } from './menu/menu.module';
 import { OrdersModule } from './order/orders.module';
 import { PaymentsModule } from './payments/payments.module';
+import { GatewayModule } from './gateway/gateway.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { PaymentsModule } from './payments/payments.module';
     MenuModule,
     OrdersModule,
     PaymentsModule,
+    GatewayModule,
   ],
   controllers: [AppController],
   providers: [AppService],

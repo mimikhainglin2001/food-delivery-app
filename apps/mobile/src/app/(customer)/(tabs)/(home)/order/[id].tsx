@@ -15,6 +15,7 @@ import { useStripe } from "@stripe/stripe-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "@/lib/axios";
 import { Order } from "@food-delivery/types";
+import { useOrderSocket } from "@/hooks/use-order-socket";
 
 const STATUS_STEPS = [
   { key: "CONFIRMED", label: "Order Confirmed", icon: "✅" },
@@ -35,15 +36,29 @@ const STATUS_ORDER = [
 export default function OrderConfirmationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const orderUpdate = useOrderSocket(id ?? null);
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
 
+
+
   const [cachedDriverLocation, setCachedDriverLocation] = useState<{
     latitude: number;
     longitude: number;
   } | null>(null);
+
+  useEffect(() => {
+    if (orderUpdate) {
+      // update React Query cache directly — no new HTTP request needed
+      // ['order', id] must match the queryKey in useQuery above
+      queryClient.setQueryData(["order", id], (old: unknown) => ({
+        ...(old as object), // keep existing fields (items, address, totalAmount)
+        ...orderUpdate, // overwrite with pushed data (mainly status)
+      }));
+    }
+  }, [orderUpdate, id, queryClient]);
 
   const {
     data: order,

@@ -17,6 +17,7 @@ import {
 } from "react-native-safe-area-context";
 import { api } from "@/lib/axios";
 import { RestaurantType, Order } from "@food-delivery/types";
+import { useRestaurantSocket } from "@/hooks/use-order-socket";
 
 const STATUS_COLORS: Record<string, string> = {
   CONFIRMED: "#3B82F6",
@@ -41,6 +42,13 @@ export default function OwnerHomeScreen() {
         .then((res) => res.data),
   });
 
+  const restaurantUpdate = useRestaurantSocket(restaurant?.id ?? null);
+  useEffect(() => {
+    if (restaurantUpdate) {
+      queryClient.invalidateQueries({ queryKey: ["restaurant-orders"] });
+    }
+  }, [restaurantUpdate, queryClient]);
+
   const {
     data: orders = [],
     refetch,
@@ -49,7 +57,6 @@ export default function OwnerHomeScreen() {
     queryKey: ["restaurant-orders"],
     queryFn: () => api.get<Order[]>("/orders/restaurant").then((r) => r.data),
     enabled: !!restaurant,
-    refetchInterval: 10000,
   });
 
   const { mutate: toggleOpen } = useMutation({
@@ -149,7 +156,7 @@ export default function OwnerHomeScreen() {
         <FlatList
           style={styles.list}
           data={activeOrders}
-          keyExtractor={(item: { id: any; }) => item.id}
+          keyExtractor={(item: { id: any }) => item.id}
           contentContainerStyle={[
             styles.listContent,
             { paddingBottom: insets.bottom + TAB_BAR_OFFSET },

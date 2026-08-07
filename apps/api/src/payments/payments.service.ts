@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import { NeonHttpDatabase } from 'drizzle-orm/neon-http';
 import Stripe from 'stripe';
 import * as schema from '../db/schema';
+import { OrdersGateway } from '../gateway/orders.gateway';
 
 @Injectable()
 export class PaymentsService {
@@ -15,6 +16,7 @@ export class PaymentsService {
 
   constructor(
     @Inject('DB') private db: NeonHttpDatabase<typeof schema>,
+    private ordersGateway: OrdersGateway,
   ) {
     // initialise Stripe with the secret key
     this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -85,9 +87,8 @@ export class PaymentsService {
       throw new BadRequestException('Payment intent does not match this order');
     }
 
-    const paymentIntent = await this.stripe.paymentIntents.retrieve(
-      paymentIntentId,
-    );
+    const paymentIntent =
+      await this.stripe.paymentIntents.retrieve(paymentIntentId);
 
     if (paymentIntent.status !== 'succeeded') {
       throw new BadRequestException('Payment has not been completed');
@@ -142,6 +143,7 @@ export class PaymentsService {
         .where(eq(schema.orders.id, order.id))
         .returning();
 
+      this.ordersGateway.emitOrderUpdate(updated);
     }
 
     return { received: true }; // always return 200 to Stripe
