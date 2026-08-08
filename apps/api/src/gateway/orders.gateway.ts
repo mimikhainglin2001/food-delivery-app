@@ -58,7 +58,7 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
   emitOrderUpdate(order: {
     id: string;
     restaurantId: string;
-    status: string;
+    status: string | null;
     [key: string]: unknown;
   }) {
     // → customer watching this order

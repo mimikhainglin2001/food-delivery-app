@@ -9,6 +9,7 @@ import { MenuModule } from './menu/menu.module';
 import { OrdersModule } from './order/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { GatewayModule } from './gateway/gateway.module';
+import { DriverModule } from './driver/driver.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { GatewayModule } from './gateway/gateway.module';
     OrdersModule,
     PaymentsModule,
     GatewayModule,
+    DriverModule,
   ],
   controllers: [AppController],
   providers: [AppService],
