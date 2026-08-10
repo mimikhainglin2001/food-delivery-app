@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 import { NeonHttpDatabase } from 'drizzle-orm/neon-http';
 import * as schema from '../db/schema';
 import { UserRole } from '@food-delivery/types';
@@ -25,6 +25,26 @@ export class DriverService {
       .set({ isOnline: !driver.isOnline })
       .where(eq(schema.users.id, driverId))
       .returning();
+
+    // going online → claim any orders that reached READY while no driver was available
+    if (updated.isOnline) {
+      const pendingOrders = await this.db
+        .select()
+        .from(schema.orders)
+        .where(
+          and(eq(schema.orders.status, 'READY'), isNull(schema.orders.driverId)),
+        )
+        .orderBy(asc(schema.orders.createdAt));
+
+      for (const order of pendingOrders) {
+        const [claimed] = await this.db
+          .update(schema.orders)
+          .set({ driverId, updatedAt: new Date() })
+          .where(eq(schema.orders.id, order.id))
+          .returning();
+        this.ordersGateway.emitDriverAssigned(driverId, claimed);
+      }
+    }
 
     return { isOnline: updated.isOnline };
   }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import {
   ActivityIndicator,
   Alert,
@@ -15,7 +16,11 @@ import { useStripe } from "@stripe/stripe-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "@/lib/axios";
 import { Order } from "@food-delivery/types";
-import { useOrderSocket } from "@/hooks/use-order-socket";
+import {
+  useOrderSocket,
+  useDriverLocationSocket,
+} from "@/hooks/use-order-socket";
+import { RatingModal } from "@/components/rating-modal";
 
 const STATUS_STEPS = [
   { key: "CONFIRMED", label: "Order Confirmed", icon: "✅" },
@@ -41,8 +46,6 @@ export default function OrderConfirmationScreen() {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
-
-
 
   const [cachedDriverLocation, setCachedDriverLocation] = useState<{
     latitude: number;
@@ -105,6 +108,10 @@ export default function OrderConfirmationScreen() {
     },
   });
 
+  const liveDriverLocation = useDriverLocationSocket(
+    order?.status === "PICKED_UP" ? (id ?? null) : null,
+  );
+
   // hydrate from Redis when customer opens screen mid-delivery
   useEffect(() => {
     if (!id || !order?.driverId || order?.status !== "PICKED_UP") return;
@@ -117,34 +124,38 @@ export default function OrderConfirmationScreen() {
       .catch(() => {});
   }, [id, order?.driverId, order?.status]);
 
+  const driverLocation = liveDriverLocation ?? cachedDriverLocation;
+  const showMap = !!driverLocation && order?.status === "PICKED_UP";
+
   async function handlePayment() {
     if (!order) return;
     setPaymentLoading(true);
 
     try {
-      // step1 - get clientsecret from our backend
       const res = await api.post<{ clientSecret: string }>("/payments/intent", {
         orderId: order.id,
       });
 
-      // step2 - initialize the payment sheet
       const { error: initError } = await initPaymentSheet({
         merchantDisplayName: "Food Delivery",
         paymentIntentClientSecret: res.data.clientSecret,
       });
 
       if (initError) {
-        Alert.alert("Payment setup failed", initError.message);
+        Alert.alert("Payment setup failed", initError.message ?? "Unknown error");
         return;
       }
 
       const { error: paymentError } = await presentPaymentSheet();
 
       if (paymentError) {
-        Alert.alert("Payment failed", paymentError.message);
+        Alert.alert("Payment failed", paymentError.message ?? "Unknown error");
         return;
       }
 
+      // confirm payment with backend (fast-path, works without webhook)
+      // the cached order still has stripePaymentIntentId === null, so derive
+      // the intent id from the client secret returned by the intent endpoint
       const paymentIntentId = res.data.clientSecret.split("_secret_")[0];
       await api.post("/payments/confirm", {
         orderId: order.id,
@@ -170,9 +181,11 @@ export default function OrderConfirmationScreen() {
         );
       }
     } catch (e: any) {
+      const message =
+        e?.response?.data?.message ?? e?.message ?? "Something went wrong";
       Alert.alert(
         "Error",
-        e?.response?.data?.message ?? "Something went wrong",
+        Array.isArray(message) ? message.join("\n") : String(message),
       );
     } finally {
       setPaymentLoading(false);
@@ -252,6 +265,27 @@ export default function OrderConfirmationScreen() {
             </Pressable>
           )}
 
+          {showMap && (
+            <MapView
+              style={styles.map}
+              provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
+              region={{
+                latitude: driverLocation.latitude,
+                longitude: driverLocation.longitude,
+                latitudeDelta: 0.01,
+                longitudeDelta: 0.01,
+              }}
+            >
+              <Marker
+                coordinate={driverLocation}
+                title="Your driver"
+                description="On the way to you"
+              >
+                <Text style={styles.driverPin}>🛵</Text>
+              </Marker>
+            </MapView>
+          )}
+
           {order?.status === "CANCELLED" ? (
             <View style={styles.cancelledBox}>
               <Text style={styles.cancelledText}>❌ Order Cancelled</Text>
@@ -307,6 +341,17 @@ export default function OrderConfirmationScreen() {
             <Text style={styles.homeButtonText}>Back to Home</Text>
           </Pressable>
         </View>
+
+        <RatingModal
+          visible={showRatingModal}
+          hasDriver={!!order?.driverId}
+          onSubmit={submitReview}
+          onDismiss={() => {
+            setShowRatingModal(false);
+            setRatingSubmitted(true);
+          }}
+          isSubmitting={isSubmittingReview}
+        />
       </ScrollView>
     </SafeAreaView>
   );

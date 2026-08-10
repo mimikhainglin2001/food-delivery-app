@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { openSettings } from "expo-linking";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -11,7 +12,6 @@ import {
 } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { showAlert } from "@/components/custom-alert";
 import { api } from "@/lib/axios";
 import { useImageUploader } from "@/lib/uploadthing";
 import { RestaurantType } from "@food-delivery/types";
@@ -48,7 +48,7 @@ export default function EditRestaurantScreen() {
       setImageUrl(res[0].ufsUrl);
     },
     onUploadError: (error) => {
-      showAlert("Upload failed", error.message);
+      Alert.alert("Upload failed", error.message);
     },
   });
 
@@ -66,7 +66,7 @@ export default function EditRestaurantScreen() {
       router.back();
     },
     onError: (e: any) => {
-      showAlert(
+      Alert.alert(
         "Error",
         e?.response?.data?.message ?? "Something went wrong",
       );
@@ -83,7 +83,7 @@ export default function EditRestaurantScreen() {
           void openImagePicker({
             source: "library",
             onInsufficientPermissions: () => {
-              showAlert(
+              Alert.alert(
                 "No Permissions",
                 "You need to grant permission to your Photos",
                 [

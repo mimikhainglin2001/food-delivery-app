@@ -4,6 +4,7 @@ import {
   Alert,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -30,6 +31,17 @@ export default function DriverHomeScreen() {
       api.get<{ isOnline: boolean }>("/driver/status").then((r) => r.data),
   });
 
+  // orders assigned to this driver that are ready to pick up
+  const { data: pickupOrders = [], isLoading: pickupLoading } = useQuery<
+    (Order & { restaurant?: { id: string; name: string } })[]
+  >({
+    queryKey: ["driver-ready-orders"],
+    queryFn: () =>
+      api
+        .get<Order[]>("/orders/mine")
+        .then((r) => r.data.filter((o) => o.status === "READY")),
+  });
+
   // flip isOnline on the server via PATCH /driver/online
   const { mutate: toggleOnline, isPending: toggling } = useMutation({
     mutationFn: () => api.patch("/driver/online"),
@@ -45,7 +57,7 @@ export default function DriverHomeScreen() {
     onError: (e: any) =>
       Alert.alert(
         "Error",
-        e?.response?.data?.message ?? "Something went wrong",
+        e?.response?.data?.message ?? e?.message ?? "Something went wrong",
       ),
   });
 
@@ -56,11 +68,13 @@ export default function DriverHomeScreen() {
     onSuccess: () => {
       setIncomingOrder(null);
       queryClient.invalidateQueries({ queryKey: ["driver-active-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["driver-ready-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["driver-orders"] });
     },
     onError: (e: any) =>
       Alert.alert(
         "Error",
-        e?.response?.data?.message ?? "Something went wrong",
+        e?.response?.data?.message ?? e?.message ?? "Something went wrong",
       ),
   });
 
@@ -98,7 +112,7 @@ export default function DriverHomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>Driver Dashboard</Text>
 
         {/* online/offline toggle card */}
@@ -123,7 +137,40 @@ export default function DriverHomeScreen() {
               : "Go online to start receiving orders"}
           </Text>
         </View>
-      </View>
+
+        <Text style={styles.sectionTitle}>Orders to Pick Up</Text>
+        {pickupLoading ? (
+          <View style={styles.centeredSmall}>
+            <ActivityIndicator color="#FF6B35" />
+          </View>
+        ) : pickupOrders.length === 0 ? (
+          <Text style={styles.emptySubText}>
+            No orders ready for pickup right now
+          </Text>
+        ) : (
+          pickupOrders.map((order) => (
+            <View key={order.id} style={styles.pickupCard}>
+              <View style={styles.pickupHeader}>
+                <Text style={styles.pickupRestaurant}>
+                  {order.restaurant?.name ?? "Restaurant"}
+                </Text>
+                <Text style={styles.pickupTotal}>
+                  ${Number(order.totalAmount).toFixed(2)}
+                </Text>
+              </View>
+              <Text style={styles.pickupAddress} numberOfLines={1}>
+                📍 {order.deliveryAddress}
+              </Text>
+              <Pressable
+                style={styles.pickupButton}
+                onPress={() => acceptOrder(order.id)}
+              >
+                <Text style={styles.pickupButtonText}>Pick Up Order</Text>
+              </Pressable>
+            </View>
+          ))
+        )}
+      </ScrollView>
 
       {/* incoming order modal — shown when driver:assigned fires */}
       <Modal visible={!!incomingOrder} transparent animationType="slide">
@@ -209,6 +256,61 @@ const styles = StyleSheet.create({
   statusSubtext: {
     fontSize: 13,
     color: "#666",
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  centeredSmall: {
+    paddingVertical: 24,
+    alignItems: "center",
+  },
+  emptySubText: {
+    fontSize: 14,
+    color: "#999",
+    marginBottom: 8,
+  },
+  pickupCard: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eee",
+    borderRadius: 12,
+    padding: 16,
+    gap: 6,
+    marginBottom: 12,
+  },
+  pickupHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  pickupRestaurant: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#333",
+  },
+  pickupTotal: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FF6B35",
+  },
+  pickupAddress: {
+    fontSize: 13,
+    color: "#666",
+  },
+  pickupButton: {
+    backgroundColor: "#FF6B35",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 6,
+  },
+  pickupButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
   },
   modalOverlay: {
     flex: 1,

@@ -1,130 +1,103 @@
+import { useEffect, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import * as Location from "expo-location";
+import { io, Socket } from "socket.io-client";
 import { api } from "@/lib/axios";
+import { useAuth } from "@/context/auth-context";
 import { Order } from "@food-delivery/types";
 
-type DriverOrder = Order & {
-  restaurant: { id: string; name: string };
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  READY: "#06B6D4",
-  PICKED_UP: "#FF6B35",
-  DELIVERED: "#22C55E",
-  CANCELLED: "#EF4444",
-};
-
-function ActiveCard({ order }: { order: DriverOrder }) {
-  const queryClient = useQueryClient();
-  const statusColor = STATUS_COLORS[order.status] ?? "#999";
-  const isPickedUp = order.status === "PICKED_UP";
-
-  const { mutate: updateStatus, isPending } = useMutation({
-    mutationFn: (status: "PICKED_UP" | "DELIVERED") =>
-      api.patch(`/orders/${order.id}/status`, { status }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["driver-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["driver-active-orders"] });
-    },
-    onError: (e: any) =>
-      Alert.alert("Error", e?.response?.data?.message ?? "Something went wrong"),
-  });
-
-  const { mutate: decline, isPending: declining } = useMutation({
-    mutationFn: () => api.post(`/driver/orders/${order.id}/decline`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["driver-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["driver-active-orders"] });
-    },
-    onError: (e: any) =>
-      Alert.alert("Error", e?.response?.data?.message ?? "Something went wrong"),
-  });
-
-  return (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.restaurant}>
-          {order.restaurant?.name ?? "Restaurant"}
-        </Text>
-        <View
-          style={[styles.statusBadge, { backgroundColor: statusColor + "20" }]}
-        >
-          <Text style={[styles.statusText, { color: statusColor }]}>
-            {isPickedUp ? "ON DELIVERY" : "READY TO PICK UP"}
-          </Text>
-        </View>
-      </View>
-
-      <Text style={styles.address} numberOfLines={1}>
-        📍 {order.deliveryAddress}
-      </Text>
-
-      <View style={styles.cardFooter}>
-        <Text style={styles.total}>${Number(order.totalAmount).toFixed(2)}</Text>
-        <Text style={styles.orderId}>
-          #{order.id.slice(0, 8).toUpperCase()}
-        </Text>
-      </View>
-
-      <View style={styles.actions}>
-        {!isPickedUp ? (
-          <Pressable
-            style={[styles.pickupButton, isPending && styles.buttonDisabled]}
-            onPress={() => updateStatus("PICKED_UP")}
-            disabled={isPending}
-          >
-            {isPending ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.pickupButtonText}>Pick Up Order</Text>
-            )}
-          </Pressable>
-        ) : (
-          <Pressable
-            style={[styles.deliveredButton, isPending && styles.buttonDisabled]}
-            onPress={() => updateStatus("DELIVERED")}
-            disabled={isPending}
-          >
-            {isPending ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.deliveredButtonText}>Mark as Delivered</Text>
-            )}
-          </Pressable>
-        )}
-
-        {!isPickedUp && (
-          <Pressable
-            style={[styles.declineButton, declining && styles.buttonDisabled]}
-            onPress={() => decline()}
-            disabled={declining}
-          >
-            <Text style={styles.declineButtonText}>Decline</Text>
-          </Pressable>
-        )}
-      </View>
-    </View>
-  );
-}
-
 export default function DriverActiveScreen() {
-  const { data: orders = [], isLoading } = useQuery<DriverOrder[]>({
+  const insets = useSafeAreaInsets();
+  const TAB_BAR_OFFSET = 88;
+
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const socketRef = useRef<Socket | null>(null);
+  const locationWatchRef = useRef<Location.LocationSubscription | null>(null);
+
+  // driver's assigned orders — only PICKED_UP needs GPS + Mark Delivered
+  const { data: activeOrders = [], isLoading } = useQuery<Order[]>({
     queryKey: ["driver-active-orders"],
-    queryFn: () => api.get<DriverOrder[]>("/orders/mine").then((r) => r.data),
+    queryFn: () =>
+      api
+        .get<Order[]>("/orders/mine")
+        .then((r) => r.data.filter((o) => o.status === "PICKED_UP")),
   });
 
-  const activeOrders = orders.filter((o) =>
-    ["READY", "PICKED_UP"].includes(o.status),
-  );
+  const activeOrder = activeOrders[0] ?? null;
+
+  const { mutate: markDelivered, isPending } = useMutation({
+    mutationFn: (orderId: string) =>
+      api.patch(`/orders/${orderId}/status`, { status: "DELIVERED" }),
+    onSuccess: () => {
+      stopTracking();
+      queryClient.invalidateQueries({ queryKey: ["driver-active-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["driver-orders"] });
+    },
+    onError: (e: any) =>
+      Alert.alert(
+        "Error",
+        e?.response?.data?.message ?? e?.message ?? "Something went wrong",
+      ),
+  });
+
+  // request permission, connect socket, start GPS watch
+  async function startTracking(orderId: string) {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== Location.PermissionStatus.GRANTED) {
+      Alert.alert(
+        "Permission denied",
+        "Location permission is required for delivery tracking.",
+      );
+      return;
+    }
+
+    socketRef.current = io(`${process.env.EXPO_PUBLIC_SERVER_URL}/orders`, {
+      transports: ["websocket"],
+    });
+
+    locationWatchRef.current = await Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.High,
+        timeInterval: 3000,
+        distanceInterval: 10,
+      },
+      (location) => {
+        socketRef.current?.emit("driver:location", {
+          driverId: user?.id,
+          orderId,
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        });
+      },
+    );
+  }
+
+  function stopTracking() {
+    locationWatchRef.current?.remove();
+    socketRef.current?.disconnect();
+    locationWatchRef.current = null;
+    socketRef.current = null;
+  }
+
+  useEffect(() => {
+    if (activeOrder) {
+      void startTracking(activeOrder.id);
+    }
+    return () => stopTracking();
+  }, [activeOrder?.id]);
 
   if (isLoading) {
     return (
@@ -136,25 +109,71 @@ export default function DriverActiveScreen() {
     );
   }
 
-  return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
-      <Text style={styles.title}>Active Deliveries</Text>
-
-      {activeOrders.length === 0 ? (
+  if (!activeOrder) {
+    return (
+      <SafeAreaView style={styles.container} edges={["top"]}>
         <View style={styles.centered}>
-          <Text style={styles.emptyText}>No active orders</Text>
+          <Text style={styles.emptyText}>No active delivery</Text>
           <Text style={styles.emptySubText}>
-            Orders ready for pickup will appear here
+            Accept an order on Home, or tap a PICKED_UP order in History
           </Text>
         </View>
-      ) : (
-        <FlatList
-          data={activeOrders}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) => <ActiveCard order={item} />}
-        />
-      )}
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <View
+        style={
+          (styles.content, { paddingBottom: insets.bottom + TAB_BAR_OFFSET })
+        }
+      >
+        <Text style={styles.title}>Active Delivery</Text>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Order ID</Text>
+          <Text style={styles.value}>
+            #{activeOrder.id.slice(0, 8).toUpperCase()}
+          </Text>
+
+          <Text style={styles.label}>Deliver to</Text>
+          <Text style={styles.value}>{activeOrder.deliveryAddress}</Text>
+
+          <Text style={styles.label}>Status</Text>
+          <Text style={[styles.value, styles.status]}>
+            {activeOrder.status}
+          </Text>
+        </View>
+
+        <View style={styles.trackingBadge}>
+          <Text style={styles.trackingText}>📡 Broadcasting location...</Text>
+        </View>
+
+        <Pressable
+          style={styles.deliveredButton}
+          onPress={() => {
+            Alert.alert(
+              "Confirm delivery?",
+              "Mark this order as delivered?",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delivered",
+                  onPress: () => markDelivered(activeOrder.id),
+                },
+              ],
+            );
+          }}
+          disabled={isPending}
+        >
+          {isPending ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.deliveredButtonText}>Mark as Delivered</Text>
+          )}
+        </Pressable>
+      </View>
     </SafeAreaView>
   );
 }
@@ -162,6 +181,7 @@ export default function DriverActiveScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    padding: 12,
     backgroundColor: "#fff",
   },
   centered: {
@@ -169,107 +189,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 12,
-  },
-  list: {
-    padding: 16,
-    gap: 12,
-  },
-  card: {
-    backgroundColor: "#f9f9f9",
-    borderRadius: 16,
-    padding: 16,
-    gap: 8,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  restaurant: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    flexShrink: 1,
-  },
-  statusBadge: {
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
-  address: {
-    fontSize: 14,
-    color: "#555",
-  },
-  cardFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  total: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#333",
-  },
-  orderId: {
-    fontSize: 13,
-    color: "#999",
-  },
-  actions: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 4,
-  },
-  pickupButton: {
-    flex: 1,
-    backgroundColor: "#06B6D4",
-    borderRadius: 10,
-    padding: 12,
-    alignItems: "center",
-  },
-  pickupButtonText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  deliveredButton: {
-    flex: 1,
-    backgroundColor: "#22C55E",
-    borderRadius: 10,
-    padding: 12,
-    alignItems: "center",
-  },
-  deliveredButtonText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  declineButton: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 12,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ddd",
-  },
-  declineButtonText: {
-    color: "#EF4444",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  buttonDisabled: {
-    opacity: 0.6,
   },
   emptyText: {
     fontSize: 18,
@@ -281,5 +200,58 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#999",
     textAlign: "center",
+  },
+  content: {
+    flex: 1,
+    padding: 24,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "700",
+    marginBottom: 24,
+  },
+  card: {
+    backgroundColor: "#f9f9f9",
+    borderRadius: 16,
+    padding: 20,
+    gap: 6,
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 8,
+  },
+  value: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#333",
+  },
+  status: {
+    color: "#FF6B35",
+  },
+  trackingBadge: {
+    backgroundColor: "#DCFCE7",
+    borderRadius: 8,
+    padding: 12,
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  trackingText: {
+    fontSize: 14,
+    color: "#16A34A",
+    fontWeight: "500",
+  },
+  deliveredButton: {
+    backgroundColor: "#FF6B35",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    marginTop: "auto",
+  },
+  deliveredButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

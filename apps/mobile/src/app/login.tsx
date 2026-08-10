@@ -2,13 +2,13 @@ import { useState } from "react";
 import axios from "axios";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { showAlert } from "@/components/custom-alert";
 import { useAuth } from "@/context/auth-context";
 import { router } from "expo-router";
 
@@ -20,7 +20,7 @@ export default function LoginScreen() {
 
   async function handleLogin() {
     if (!email || !password)
-      return showAlert("Incomplete form", "Please fill in all fields.");
+      return Alert.alert("Incomplete form", "Please fill in all fields.");
     setIsLoading(true);
 
     try {
@@ -34,7 +34,7 @@ export default function LoginScreen() {
           ? "Invalid email or password"
           : (response.data as { message?: string }).message ?? "Something went wrong"
         : "Cannot reach the server. Check your connection.";
-      showAlert("Login failed", message);
+      Alert.alert("Login failed", message);
     } finally {
       setIsLoading(false);
     }

@@ -29,7 +29,7 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('me') // api/auth/me
-  me(@Request() req: ExpressRequest & { user: JwtPayload }) {
-    return req.user;
+  async me(@Request() req: ExpressRequest & { user: JwtPayload }) {
+    return this.authService.findById(req.user.sub);
   }
 }

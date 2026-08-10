@@ -32,10 +32,9 @@ export function useOrderSocket(orderId: string | null) {
 
     s.on("order:updated", handler);
 
-    // cleanup on unmount — remove listener + disconnect to prevent memory leaks
+    // cleanup on unmount — remove listener (do NOT disconnect shared socket)
     return () => {
       s.off("order:updated", handler);
-      s.disconnect();
     };
   }, [orderId]);
 
@@ -64,10 +63,39 @@ export function useRestaurantSocket(restaurantId: string | null) {
 
     return () => {
       s.off("order:updated", handler);
-      s.disconnect();
     };
   }, [restaurantId]);
 
   return orderUpdate; // screen calls invalidateQueries when this changes
+}
+
+export function useDriverLocationSocket(orderId: string | null) {
+  const [driverLocation, setDriverLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!orderId) return;
+
+    const s = getSocket();
+    if (!s.connected) s.connect();
+    s.emit("join:order", orderId);
+
+    const handler = (data: { latitude: number; longitude: number }) => {
+      setDriverLocation({
+        latitude: data.latitude,
+        longitude: data.longitude,
+      });
+    };
+
+    s.on("driver:location", handler);
+
+    return () => {
+      s.off("driver:location", handler);
+    };
+  }, [orderId]);
+
+  return driverLocation;
 }
 

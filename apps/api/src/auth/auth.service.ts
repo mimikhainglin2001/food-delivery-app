@@ -63,6 +63,17 @@ export class AuthService {
     };
   }
 
+  //current user
+  async findById(id: string) {
+    const [user] = await this.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, id));
+
+    if (!user) throw new UnauthorizedException('Invalid session');
+    return this.sanitizeUser(user);
+  }
+
   private sanitizeUser(user: schema.User) {
     const { password, ...sanitizedUser } = user; // remove the password
     return sanitizedUser;

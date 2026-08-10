@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,7 +9,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { showAlert } from "@/components/custom-alert";
 import { useAuth } from "@/context/auth-context";
 import { router } from "expo-router";
 import { UserRole } from "@food-delivery/types";
@@ -30,14 +30,14 @@ export default function RegisterScreen() {
 
   async function handleRegister() {
     if (!firstName || !lastName || !email || !password) {
-      return showAlert("Incomplete form", "Please fill in all fields.");
+      return Alert.alert("Incomplete form", "Please fill in all fields.");
     }
     setIsLoading(true);
     try {
       await register({ firstName, lastName, email, password, role });
       router.replace("/");
     } catch (error: any) {
-      showAlert(
+      Alert.alert(
         "Registration failed",
         error?.response?.data?.message ?? "Something went wrong",
       );

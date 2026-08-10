@@ -75,7 +75,7 @@ export default function OwnerHomeScreen() {
     onError: (e: any) =>
       Alert.alert(
         "Error",
-        e?.response?.data?.message ?? "Could not update status",
+        e?.response?.data?.message ?? e?.message ?? "Could not update status",
       ),
   });
   useEffect(() => {

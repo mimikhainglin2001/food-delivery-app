@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
-import { CustomAlertProvider } from "@/components/custom-alert";
 import { AuthProvider, useAuth } from "@/context/auth-context";
 import { Stack } from "expo-router";
 import { UserRole } from "@food-delivery/types";

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { openSettings } from "expo-linking";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   Modal,
@@ -14,7 +15,6 @@ import {
 } from "react-native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { showAlert } from "@/components/custom-alert";
 import { api } from "@/lib/axios";
 import { useImageUploader } from "@/lib/uploadthing";
 import { MenuCategory, MenuItem, RestaurantType } from "@food-delivery/types";
@@ -74,7 +74,7 @@ export default function OwnerMenuScreen() {
       setShowAddCategory(false);
     },
     onError: (e: { response?: { data?: { message?: string } } }) => {
-      showAlert(
+      Alert.alert(
         "Error",
         e.response?.data?.message ?? "Could not create category",
       );
@@ -92,7 +92,7 @@ export default function OwnerMenuScreen() {
       });
     },
     onError: (e: { response?: { data?: { message?: string } } }) => {
-      showAlert(
+      Alert.alert(
         "Error",
         e.response?.data?.message ?? "Could not delete category",
       );
@@ -102,7 +102,7 @@ export default function OwnerMenuScreen() {
   function handleAddCategory() {
     const name = newCategoryName.trim();
     if (!name) {
-      showAlert("Name required", "Please enter a category name.");
+      Alert.alert("Name required", "Please enter a category name.");
       return;
     }
     addCategory(name);
@@ -118,7 +118,7 @@ export default function OwnerMenuScreen() {
       setNewItemImageUrl(res[0].ufsUrl);
     },
     onUploadError: (error) => {
-      showAlert("Upload failed", error.message);
+      Alert.alert("Upload failed", error.message);
     },
   });
 
@@ -140,7 +140,7 @@ export default function OwnerMenuScreen() {
       setShowAddItem(false);
     },
     onError: (e: { response?: { data?: { message?: string } } }) => {
-      showAlert(
+      Alert.alert(
         "Error",
         e.response?.data?.message ?? "Could not create menu item",
       );
@@ -155,7 +155,7 @@ export default function OwnerMenuScreen() {
         queryKey: ["menu-items", restaurant?.id],
       }),
     onError: (e: { response?: { data?: { message?: string } } }) => {
-      showAlert(
+      Alert.alert(
         "Error",
         e.response?.data?.message ?? "Could not update availability",
       );
@@ -166,11 +166,11 @@ export default function OwnerMenuScreen() {
     const name = newItemName.trim();
     const price = newItemPrice.trim();
     if (!name || !price) {
-      showAlert("Required fields", "Item name and price are required.");
+      Alert.alert("Required fields", "Item name and price are required.");
       return;
     }
     if (!selectedCategoryId) {
-      showAlert("Error", "No category selected.");
+      Alert.alert("Error", "No category selected.");
       return;
     }
     addItem();
@@ -236,7 +236,7 @@ export default function OwnerMenuScreen() {
                 <Text style={styles.categoryName}>{category.name}</Text>
                 <Pressable
                   onPress={() => {
-                    showAlert(
+                    Alert.alert(
                       "Delete category?",
                       "All items in this category will also be deleted.",
                       [
@@ -289,7 +289,7 @@ export default function OwnerMenuScreen() {
                       </View>
                       <Pressable
                         onPress={() => {
-                          showAlert("Delete item?", item.name, [
+                          Alert.alert("Delete item?", item.name, [
                             { text: "Cancel", style: "cancel" },
                             {
                               text: "Delete",
@@ -359,7 +359,7 @@ export default function OwnerMenuScreen() {
                 void openItemImagePicker({
                   source: "library",
                   onInsufficientPermissions: () => {
-                    showAlert(
+                    Alert.alert(
                       "No Permissions",
                       "You need to grant permission to your Photos",
                       [

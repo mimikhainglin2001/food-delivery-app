@@ -2,6 +2,7 @@ import { openSettings } from "expo-linking";
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,7 +12,6 @@ import {
 } from "react-native";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { showAlert } from "@/components/custom-alert";
 import { api } from "@/lib/axios";
 import { useImageUploader } from "@/lib/uploadthing";
 
@@ -26,10 +26,10 @@ export default function CreateRestaurantScreen() {
   const { openImagePicker, isUploading } = useImageUploader("restaurantImage", {
     onClientUploadComplete: (res) => {
       setImageUrl(res[0].ufsUrl);
-      showAlert("Image uploaded", "Your image was uploaded successfully.");
+      Alert.alert("Image uploaded", "Your image was uploaded successfully.");
     },
     onUploadError: (error) => {
-      showAlert("Upload failed", error.message);
+      Alert.alert("Upload failed", error.message);
     },
   });
 
@@ -47,7 +47,7 @@ export default function CreateRestaurantScreen() {
       router.replace("/(owner)/(index)");
     },
     onError: (e: any) => {
-      showAlert(
+      Alert.alert(
         "Error",
         e?.response?.data?.message ?? "Something went wrong",
       );
@@ -56,7 +56,7 @@ export default function CreateRestaurantScreen() {
 
   function handleSubmit() {
     if (!name || !address || !cuisineType) {
-      return showAlert(
+      return Alert.alert(
         "Incomplete form",
         "Please fill in all required fields.",
       );
@@ -74,7 +74,7 @@ export default function CreateRestaurantScreen() {
           void openImagePicker({
             source: "library",
             onInsufficientPermissions: () => {
-              showAlert(
+              Alert.alert(
                 "No permissions",
                 "You need to grant permission to your phone",
                 [
